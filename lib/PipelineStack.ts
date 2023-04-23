@@ -5,6 +5,7 @@ import * as codePipeline from "aws-cdk-lib/aws-codepipeline";
 import * as codeCommit from 'aws-cdk-lib/aws-codecommit';
 import * as codePipelineActions from "aws-cdk-lib/aws-codepipeline-actions";
 import * as codeCommitActions from "aws-cdk-lib/aws-codepipeline-actions";
+import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import * as cf from "aws-cdk-lib/aws-cloudfront";
 import {Construct} from "constructs";
 
@@ -32,6 +33,13 @@ export class PipelineStack extends cdk.Stack {
       branchOrRef: 'main'
     });
 
+    const githubSource = codebuild.Source.gitHub({
+      owner: 'CallMeCCLemon',
+      repo: 'TheDailyAbstractionWebsiteAssets',
+      webhook: true,
+      branchOrRef: 'main'
+    });
+
     const buildSpec = this.getBuildSpec();
     const project = new codebuild.Project(this, 'blog-website-assets-code-build-project', {
       source,
@@ -42,12 +50,27 @@ export class PipelineStack extends cdk.Stack {
       buildSpec
     });
 
+    const githubProject = new codebuild.Project(this, 'github-website-assets-code-build-project', {
+      source: githubSource,
+      environment: {
+        buildImage: codebuild.LinuxBuildImage.STANDARD_6_0,
+        privileged: true,
+      },
+      buildSpec
+    });
+
     this.websiteAssetsS3Bucket.grantReadWrite(project.grantPrincipal);
+    this.websiteAssetsS3Bucket.grantReadWrite(githubProject.grantPrincipal);
 
     const artifacts = {
       source: new codePipeline.Artifact('Source'),
-      build: new codePipeline.Artifact('BuildOutput')
+      githubSource: new codePipeline.Artifact('GithubSource'),
+      build: new codePipeline.Artifact('BuildOutput'),
+      githubBuild: new codePipeline.Artifact('GithubBuildOutput')
     };
+
+    const githubSecret =
+      secrets.Secret.fromSecretCompleteArn(this, 'github-access-token-secret', "arn:aws:secretsmanager:ap-northeast-1:139054167618:secret:NewestGithubPersonalAccessToken-HOm0Xx");
 
     const pipelineActions = {
       source: new codePipelineActions.CodeCommitSourceAction({
@@ -68,6 +91,27 @@ export class PipelineStack extends cdk.Stack {
         bucket: this.websiteAssetsS3Bucket,
         input: artifacts.build,
       }),
+
+      githubSource: new codePipelineActions.GitHubSourceAction({
+        actionName: "Github",
+        output: artifacts.githubSource,
+        owner: 'CallMeCCLemon',
+        repo: 'TheDailyAbstractionWebsiteAssets',
+        branch: 'main',
+        trigger: codePipelineActions.GitHubTrigger.WEBHOOK,
+        oauthToken: githubSecret.secretValue
+      }),
+      githubBuild: new codePipelineActions.CodeBuildAction({
+        actionName: 'GithubCodeBuild',
+        project: githubProject,
+        input: artifacts.githubSource,
+        outputs: [artifacts.githubBuild],
+      }),
+      githubDeploy: new codePipelineActions.S3DeployAction({
+        actionName: 'GithubS3Deploy',
+        bucket: this.websiteAssetsS3Bucket,
+        input: artifacts.githubBuild,
+      }),
     };
 
     const pipeline = new codePipeline.Pipeline(this, 'blog-deploy-pipeline', {
@@ -76,6 +120,15 @@ export class PipelineStack extends cdk.Stack {
         {stageName: 'Source', actions: [pipelineActions.source]},
         {stageName: 'Build', actions: [pipelineActions.build]},
         {stageName: 'Deploy', actions: [pipelineActions.deploy]},
+      ],
+    });
+
+    const githubPipeline = new codePipeline.Pipeline(this, 'github-deploy-pipeline', {
+      pipelineName: `github-website-deploy-pipeline`,
+      stages: [
+        {stageName: 'GithubSource', actions: [pipelineActions.githubSource]},
+        {stageName: 'GithubBuild', actions: [pipelineActions.githubBuild]},
+        {stageName: 'GithubDeploy', actions: [pipelineActions.githubDeploy]},
       ],
     });
   }

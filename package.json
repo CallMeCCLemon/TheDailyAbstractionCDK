@@ -1,5 +1,5 @@
 {
-  "name": "blog_cdk",
+  "name": "the-daily-abstraction-cdk",
   "version": "0.1.0",
   "bin": {
     "personal_blog_cdk": "bin/blog_cdk.js"
