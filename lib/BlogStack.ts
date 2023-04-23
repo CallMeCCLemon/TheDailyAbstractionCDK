@@ -9,16 +9,24 @@ import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import {HOSTED_ZONE_ID, HOSTED_ZONE_NAME, TOP_LEVEL_DOMAIN_CERTIFICATE_ARN} from "./constants";
 
 interface PersonalBlogStackProps extends cdk.StackProps {
-  websiteAssetsS3Bucket: s3.IBucket;
-  originAccessIdentity: cf.OriginAccessIdentity;
 }
 
 export class BlogStack extends cdk.Stack {
+
+  public websiteAssetsS3Bucket: s3.Bucket;
+  public originAccessIdentity: cf.OriginAccessIdentity;
 
   public topLevelHostedZone: route53.IHostedZone;
 
   constructor(scope: Construct, id: string, props: PersonalBlogStackProps) {
     super(scope, id, props);
+
+    this.websiteAssetsS3Bucket = new s3.Bucket(this, 'blog-website-assets-bucket', {
+      accessControl: s3.BucketAccessControl.PRIVATE,
+    });
+
+    this.originAccessIdentity = new cf.OriginAccessIdentity(this, 'OriginAccessIdentity');
+    this.websiteAssetsS3Bucket.grantRead(this.originAccessIdentity);
 
     this.topLevelHostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'TopLevelHostedZone', {
       zoneName: HOSTED_ZONE_NAME,
@@ -30,8 +38,8 @@ export class BlogStack extends cdk.Stack {
     const distribution = new cf.Distribution(this, 'Distribution', {
       defaultRootObject: 'index.html',
       defaultBehavior: {
-        origin: new cfOrigin.S3Origin(props.websiteAssetsS3Bucket, {
-          originAccessIdentity: props.originAccessIdentity
+        origin: new cfOrigin.S3Origin(this.websiteAssetsS3Bucket, {
+          originAccessIdentity: this.originAccessIdentity
         }),
         viewerProtocolPolicy: cf.ViewerProtocolPolicy.REDIRECT_TO_HTTPS
       },
