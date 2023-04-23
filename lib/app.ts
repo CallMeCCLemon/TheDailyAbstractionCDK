@@ -1,11 +1,8 @@
 import * as cdk from 'aws-cdk-lib';
 import {BlogStack} from "./BlogStack";
 import {PipelineStack} from "./PipelineStack";
-import {RepositoriesStack} from "./RepositoriesStack";
 import {UserPoolStack} from "./UserPoolStack";
-
-const AWS_ACCOUNT_ID = '139054167618';
-const DEFAULT_REGION = 'ap-northeast-1';
+import {AWS_ACCOUNT_ID, DEFAULT_REGION} from "./constants";
 
 const app = new cdk.App({
 });
@@ -15,20 +12,13 @@ const env = {
   region: DEFAULT_REGION
 }
 
-const repositoriesStack = new RepositoriesStack(app, 'repositories-stack', {
+const blogStack = new BlogStack(app, 'blog-stack', {
   env: env
-})
+});
 
 const pipelineStack = new PipelineStack(app, 'pipeline-stack', {
   env: env,
-  websiteSourceRepo: repositoriesStack.websiteSourceRepo,
-  websiteInfrastructureRepo: repositoriesStack.websiteInfrastructureRepo,
-});
-
-const blogStack = new BlogStack(app, 'blog-stack', {
-  websiteAssetsS3Bucket: pipelineStack.websiteAssetsS3Bucket,
-  originAccessIdentity: pipelineStack.originAccessIdentity,
-  env: env
+  websiteAssetsS3Bucket: blogStack.websiteAssetsS3Bucket,
 });
 
 const userPoolStack = new UserPoolStack(app, 'user-pool-stack', {
