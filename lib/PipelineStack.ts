@@ -6,7 +6,6 @@ import * as codeCommit from 'aws-cdk-lib/aws-codecommit';
 import * as codePipelineActions from "aws-cdk-lib/aws-codepipeline-actions";
 import * as codeCommitActions from "aws-cdk-lib/aws-codepipeline-actions";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
-import {GitHubTrigger} from "aws-cdk-lib/aws-codepipeline-actions";
 import * as cf from "aws-cdk-lib/aws-cloudfront";
 import {Construct} from "constructs";
 
@@ -94,22 +93,22 @@ export class PipelineStack extends cdk.Stack {
       }),
 
       githubSource: new codePipelineActions.GitHubSourceAction({
-        actionName: "GithubCommit",
+        actionName: "Github",
         output: artifacts.githubSource,
         owner: 'CallMeCCLemon',
         repo: 'TheDailyAbstractionWebsiteAssets',
         branch: 'main',
-        trigger: GitHubTrigger.WEBHOOK,
+        trigger: codePipelineActions.GitHubTrigger.WEBHOOK,
         oauthToken: githubSecret.secretValue
       }),
       githubBuild: new codePipelineActions.CodeBuildAction({
-        actionName: 'CodeBuild',
-        project,
+        actionName: 'GithubCodeBuild',
+        project: githubProject,
         input: artifacts.githubSource,
         outputs: [artifacts.githubBuild],
       }),
       githubDeploy: new codePipelineActions.S3DeployAction({
-        actionName: 'S3Deploy',
+        actionName: 'GithubS3Deploy',
         bucket: this.websiteAssetsS3Bucket,
         input: artifacts.githubBuild,
       }),
