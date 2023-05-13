@@ -5,6 +5,7 @@ import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import * as codePipelineActions from "aws-cdk-lib/aws-codepipeline-actions";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as cdk from "aws-cdk-lib";
+import {StageProps} from "aws-cdk-lib/aws-codepipeline/lib/pipeline";
 
 interface NodeCICDPipelineProps {
   githubRepositoryName: string;
@@ -12,6 +13,10 @@ interface NodeCICDPipelineProps {
   targetBranchName: string;
   githubSecret: secrets.ISecret;
   deploymentBucket: s3.IBucket;
+  extractZipBeforeDeploying: boolean;
+  outputObjectKey?: string;
+  buildSpec?: codebuild.BuildSpec;
+  apiBuildSpec?: codebuild.BuildSpec;
 }
 
 export class NodeCICDPipeline extends Construct {
@@ -25,7 +30,8 @@ export class NodeCICDPipeline extends Construct {
       branchOrRef: props.targetBranchName
     });
 
-    const buildSpec = this.getBuildSpec();
+    // Set the build spec to the default for codebuild if none is provided.
+    const buildSpec = props.buildSpec ?? this.getBuildSpec();
 
     const githubProject = new codebuild.Project(this, `${props.githubRepositoryName}-build-project`, {
       source: githubSource,
@@ -42,7 +48,8 @@ export class NodeCICDPipeline extends Construct {
 
     const artifacts = {
       source: new codePipeline.Artifact(`${props.githubRepositoryName}Source`),
-      buildOutput: new codePipeline.Artifact(`${props.githubRepositoryName}BuildOutput`)
+      buildOutput: new codePipeline.Artifact(`${props.githubRepositoryName}BuildOutput`),
+      apiBuildOutput: new codePipeline.Artifact(`${props.githubRepositoryName}ApiBuildOutput`),
     };
 
     const pipelineActions = {
@@ -65,16 +72,59 @@ export class NodeCICDPipeline extends Construct {
         actionName: 'Deploy',
         bucket: props.deploymentBucket,
         input: artifacts.buildOutput,
+        extract: props.extractZipBeforeDeploying,
+        objectKey: props.outputObjectKey
       }),
     };
 
+    let buildActions = [
+      pipelineActions.githubBuild
+    ];
+
+    let deployActions = [
+      pipelineActions.githubDeploy
+    ]
+
+    if (props.apiBuildSpec) {
+      const apiBuildProject = new codebuild.Project(this, `${props.githubRepositoryName}-api-build-project`, {
+        source: githubSource,
+        environment: {
+          buildImage: codebuild.LinuxBuildImage.STANDARD_6_0,
+          privileged: true,
+          computeType: codebuild.ComputeType.SMALL,
+        },
+        timeout: cdk.Duration.minutes(30),
+        buildSpec: props.apiBuildSpec
+      });
+
+      buildActions.push(
+        new codePipelineActions.CodeBuildAction({
+          actionName: 'ApiBuild',
+          project: apiBuildProject,
+          input: artifacts.source,
+          outputs: [artifacts.apiBuildOutput],
+        })
+      );
+
+      deployActions.push(
+        new codePipelineActions.S3DeployAction({
+          actionName: 'ApiDeploy',
+          bucket: props.deploymentBucket,
+          input: artifacts.apiBuildOutput,
+          extract: true,
+        })
+      );
+    }
+
+    let pipelineStages: StageProps[] = [
+      {stageName: 'Github', actions: [pipelineActions.githubSource]},
+      {stageName: 'Build', actions: buildActions},
+      {stageName: 'Deploy', actions: deployActions},
+    ];
+
     const githubPipeline = new codePipeline.Pipeline(this, `${props.githubRepositoryName}-deployment-pipeline`, {
       pipelineName: `${props.githubRepositoryName}-deployment-pipeline`,
-      stages: [
-        {stageName: 'Github', actions: [pipelineActions.githubSource]},
-        {stageName: 'Build', actions: [pipelineActions.githubBuild]},
-        {stageName: 'Deploy', actions: [pipelineActions.githubDeploy]},
-      ],
+      stages: pipelineStages,
     });
   }
 
