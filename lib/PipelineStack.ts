@@ -3,6 +3,8 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import {Construct} from "constructs";
 import {NodeCICDPipeline} from "./NodeCICDPipeline";
+import {LAMBDA_OUTPUT_KEY} from "./constants";
+import {LAMBDA_PACKAGE_BUILD_SPEC, SMITHY_MODEL_BUILD_SPEC} from "./buildSpec/LambdaPackageBuildSpec";
 
 interface PipelineStackProps extends cdk.StackProps {
   websiteAssetsS3Bucket: s3.IBucket;
@@ -21,7 +23,8 @@ export class PipelineStack extends cdk.Stack {
       githubRepositoryName: 'TheDailyAbstractionWebsiteAssets',
       targetBranchName: 'main',
       githubSecret: githubSecret,
-      deploymentBucket: props.websiteAssetsS3Bucket
+      deploymentBucket: props.websiteAssetsS3Bucket,
+      extractZipBeforeDeploying: true,
     });
 
     const lambdaDeploymentPipeline = new NodeCICDPipeline(this, 'lambda-assets-pipeline', {
@@ -29,7 +32,21 @@ export class PipelineStack extends cdk.Stack {
       githubRepositoryName: 'TheDailyAbstractionLambdas',
       targetBranchName: 'main',
       githubSecret: githubSecret,
-      deploymentBucket: props.lambdasS3Bucket
+      deploymentBucket: props.lambdasS3Bucket,
+      extractZipBeforeDeploying: false,
+      outputObjectKey: LAMBDA_OUTPUT_KEY,
+      buildSpec: LAMBDA_PACKAGE_BUILD_SPEC,
+      apiBuildSpec: SMITHY_MODEL_BUILD_SPEC,
     });
+
+    // const apiGatewayDeploymentPipeline = new NodeCICDPipeline(this, 'api-gateway-model-pipeline', {
+    //   githubRepositoryOwner: 'CallMeCCLemon',
+    //   githubRepositoryName: 'TheDailyAbstractionLambdas',
+    //   targetBranchName: 'main',
+    //   githubSecret: githubSecret,
+    //   deploymentBucket: props.lambdasS3Bucket,
+    //   extractZipBeforeDeploying: true,
+    //   buildSpec: SMITHY_MODEL_BUILD_SPEC,
+    // });
   }
 }
