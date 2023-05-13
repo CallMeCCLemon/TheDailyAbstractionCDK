@@ -38,15 +38,5 @@ export class PipelineStack extends cdk.Stack {
       buildSpec: LAMBDA_PACKAGE_BUILD_SPEC,
       apiBuildSpec: SMITHY_MODEL_BUILD_SPEC,
     });
-
-    // const apiGatewayDeploymentPipeline = new NodeCICDPipeline(this, 'api-gateway-model-pipeline', {
-    //   githubRepositoryOwner: 'CallMeCCLemon',
-    //   githubRepositoryName: 'TheDailyAbstractionLambdas',
-    //   targetBranchName: 'main',
-    //   githubSecret: githubSecret,
-    //   deploymentBucket: props.lambdasS3Bucket,
-    //   extractZipBeforeDeploying: true,
-    //   buildSpec: SMITHY_MODEL_BUILD_SPEC,
-    // });
   }
 }
